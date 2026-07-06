@@ -73,6 +73,30 @@ def run_paper(config: dict, strategy_name: str, dry_run: bool = False):
     risk_mgr = RiskManager(config)
     broker = AlpacaBroker(config, paper=True)
     
+    # Check that API keys are configured
+    api_key = config.get("broker", {}).get("api_key", "")
+    if not api_key or api_key.startswith("${"):
+        print("\n" + "=" * 60)
+        print("  ⚠️  ALPACA API KEYS NOT CONFIGURED")
+        print("=" * 60)
+        print("""
+  Paper trading requires a free Alpaca Markets account.
+  
+  1. Go to https://alpaca.markets → Sign Up (free)
+  2. Dashboard → Paper Trading → Generate API Keys
+  3. Set environment variables:
+  
+     export ALPACA_API_KEY="PK..."
+     export ALPACA_API_SECRET="..."
+  
+  4. Then run again:
+     python src/main.py --mode paper --strategy mean_reversion
+  
+  Or try the no-setup demo first:
+     python3 demo.py
+  """)
+        return
+    
     # Check account
     account = broker.get_account()
     logger.info("Account equity: $%.2f | Cash: $%.2f | Buying power: $%.2f",

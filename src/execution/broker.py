@@ -50,6 +50,13 @@ class AlpacaBroker:
     
     def _init_client(self):
         """Initialize Alpaca trading client."""
+        api_key = self.config.get("api_key", "")
+        api_secret = self.config.get("api_secret", "")
+        
+        if not api_key or not api_secret or api_key.startswith("${") or api_secret.startswith("${"):
+            self._api = None
+            return
+        
         try:
             from alpaca.trading.client import TradingClient
             from alpaca.trading.requests import MarketOrderRequest, LimitOrderRequest
@@ -60,8 +67,8 @@ class AlpacaBroker:
                 base_url = "https://paper-api.alpaca.markets"
             
             self._api = TradingClient(
-                api_key=self.config["api_key"],
-                secret_key=self.config["api_secret"],
+                api_key=api_key,
+                secret_key=api_secret,
                 paper=self.paper,
             )
             self._MarketOrderRequest = MarketOrderRequest
