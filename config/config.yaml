@@ -1,0 +1,98 @@
+# Swing Trading Bot Configuration
+# Copy to config.yaml and fill in your values
+
+# ─── Broker ───
+broker:
+  provider: alpaca          # alpaca | interactive_brokers
+  paper: true               # true = paper trading, false = live
+  api_key: "${ALPACA_API_KEY}"
+  api_secret: "${ALPACA_API_SECRET}"
+  base_url: "https://paper-api.alpaca.markets"  # or live URL
+
+# ─── Data ───
+data:
+  bar_frequency: "1Day"     # 1Min, 5Min, 15Min, 1Hour, 1Day
+  lookback_days: 1095       # 3 years
+  universe:
+    type: "etf"             # etf | sp500 | russell2000 | custom
+    symbols:                # Only used if type: custom
+      - SPY
+      - QQQ
+      - IWM
+      - XLF
+      - XLK
+      - XLE
+      - XLV
+    exclude_penny_stocks: true
+    min_dollar_volume: 10000000   # $10M minimum daily
+
+# ─── Strategy ───
+strategy:
+  name: "ml_signal"         # ml_signal | momentum | mean_reversion | ensemble
+  ml:
+    model: xgboost          # xgboost | lightgbm
+    train_window_days: 756  # 3 years
+    test_window_days: 63    # 1 quarter
+    retrain_frequency_days: 7
+    target_horizon_days: 5
+    probability_threshold_long: 0.55
+    probability_threshold_short: 0.45
+  momentum:
+    lookback_days: 252      # 12-month momentum
+    skip_days: 21           # Skip most recent month (reversal)
+    top_n: 5                # Number of positions to hold
+  mean_reversion:
+    lookback_days: 20
+    entry_zscore: 2.0       # Enter when z-score exceeds this
+    exit_zscore: 0.5        # Exit when z-score reverts to this
+    max_pairs: 5
+
+# ─── Risk Management ───
+risk:
+  max_position_pct: 0.05    # Max 5% of portfolio per position
+  max_sector_pct: 0.25      # Max 25% per sector
+  max_correlation: 0.7      # Max correlation between positions
+  daily_loss_limit_pct: 0.03   # Stop trading if down 3% in a day
+  weekly_loss_limit_pct: 0.05  # Stop trading if down 5% in a week
+  max_drawdown_pct: 0.25       # Kill switch at 25% drawdown
+  reduce_at_drawdown_pct: 0.15 # Reduce size at 15% drawdown
+  max_consecutive_losses: 8
+  vix_size_reduction: 35    # Reduce position sizes when VIX > 35
+  use_kelly_fraction: 0.5   # Half-Kelly for position sizing
+  atr_period: 14            # ATR lookback for volatility-adjusted sizing
+
+# ─── Execution ───
+execution:
+  entry_order_type: "limit"       # limit | market
+  limit_offset_pct: 0.001         # 0.1% for limit orders
+  exit_take_profit_pct: 0.03      # 3% take profit
+  exit_stop_loss_pct: 0.02        # 2% stop loss
+  exit_order_type: "market"       # market | limit (stop always market)
+  partial_fill_timeout_sec: 10
+  max_retries: 3
+  retry_delay_sec: 5
+
+# ─── Monitoring ───
+monitoring:
+  log_level: "INFO"          # DEBUG | INFO | WARNING | ERROR
+  metrics_port: 8000         # Prometheus metrics endpoint
+  daily_report: true
+  alert_on:
+    consecutive_losses: 5
+    daily_drawdown_pct: 0.02
+    api_errors_per_hour: 10
+
+# ─── Schedule ───
+schedule:
+  trading_session: "US"      # US equity market hours
+  signal_generation_time: "09:00"    # EST — before market open
+  execution_time: "09:35"            # EST — after open, let volatility settle
+  rebalance_time: "09:35"
+  end_of_day_time: "15:55"           # EST — before close
+
+# ─── Paths ───
+paths:
+  data_dir: "./data"
+  model_dir: "./models"
+  log_dir: "./logs"
+  report_dir: "./reports"

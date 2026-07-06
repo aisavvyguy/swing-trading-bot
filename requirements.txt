@@ -1,0 +1,38 @@
+# Swing Trading Bot — Dependencies
+# Install: pip install --break-system-packages -r requirements.txt
+
+# Core
+numpy>=1.26
+pandas>=2.1
+polars>=0.20
+pyarrow>=14.0
+
+# ML
+xgboost>=2.0
+lightgbm>=4.3
+scikit-learn>=1.4
+shap>=0.44
+optuna>=3.5
+
+# Data
+alpaca-py>=0.20
+yfinance>=0.2.40
+pandas-datareader>=0.10
+
+# Validation
+pydantic>=2.5
+pyyaml>=6.0
+
+# Utilities
+structlog>=24.1
+python-dotenv>=1.0
+tqdm>=4.66
+rich>=13.7
+
+# Testing
+pytest>=8.0
+pytest-cov>=4.1
+
+# Optional: Visualization
+matplotlib>=3.8
+seaborn>=0.13
