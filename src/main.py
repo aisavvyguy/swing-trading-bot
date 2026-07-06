@@ -9,6 +9,7 @@ Usage:
 import argparse
 import sys
 from pathlib import Path
+import pandas as pd
 
 # Add src to path
 sys.path.insert(0, str(Path(__file__).parent))
@@ -46,9 +47,19 @@ def load_config(config_path: str = "config/config.yaml") -> dict:
     return config
 
 
-def run_paper(config: dict, strategy_name: str):
-    """Paper trading mode — no real money."""
-    logger.info("Starting paper trading with strategy: %s", strategy_name)
+def run_paper(config: dict, strategy_name: str, dry_run: bool = False):
+    """Paper trading mode — uses Alpaca paper API with fake money, real market data.
+    
+    Alpaca's paper trading is completely free. You get:
+    - $100,000 in fake starting capital
+    - Real-time market data
+    - Realistic fills with slippage
+    - No risk to real money
+    
+    Set ALPACA_API_KEY and ALPACA_API_SECRET env vars (free at alpaca.markets).
+    """
+    mode_label = "DRY RUN" if dry_run else "PAPER"
+    logger.info("Starting %s trading with strategy: %s", mode_label, strategy_name)
     
     fetcher = DataFetcher(config)
     engineer = FeatureEngineer(config)
@@ -62,24 +73,73 @@ def run_paper(config: dict, strategy_name: str):
     risk_mgr = RiskManager(config)
     broker = AlpacaBroker(config, paper=True)
     
+    # Check account
+    account = broker.get_account()
+    logger.info("Account equity: $%.2f | Cash: $%.2f | Buying power: $%.2f",
+                account.equity, account.cash, account.buying_power)
+    
+    # Check circuit breakers
+    if risk_mgr.check_daily_loss_limit(account):
+        logger.error("Daily loss limit reached. Halting all trading.")
+        return
+    
     # Fetch universe
     universe = fetcher.get_universe()
     logger.info("Universe: %d symbols", len(universe))
     
     # Generate signals
     data = fetcher.get_daily_bars(universe)
+    if data.empty:
+        logger.error("No data fetched. Check API keys and network.")
+        return
+    
     features = engineer.transform(data)
     signals = strategy.generate_signals(features)
     
+    # Calculate volatilities for position sizing
+    volatilities = {}
+    for symbol in signals.index:
+        symbol_data = data[data["symbol"] == symbol]
+        if len(symbol_data) > 14:
+            volatilities[symbol] = symbol_data["close"].pct_change().std()
+    
     # Risk-filtered positions
-    account = broker.get_account()
-    positions = risk_mgr.size_positions(signals, account.equity)
+    positions = risk_mgr.size_positions(signals, account.equity, 
+                                         pd.Series(volatilities))
     
-    logger.info("Paper trading — would execute %d positions", len(positions))
-    for symbol, size in positions.items():
-        logger.info("  %s: %d shares", symbol, size)
+    if dry_run:
+        logger.info("DRY RUN — would execute %d positions:", len(positions))
+        for symbol, size in positions.items():
+            signal = signals.get(symbol, 0)
+            direction = "LONG" if signal > 0 else "SHORT" if signal < 0 else "FLAT"
+            logger.info("  %s %s: %d shares", direction, symbol, abs(size))
+        logger.info("Dry run complete. No orders placed.")
+        return
     
-    logger.info("Paper trading complete. No real orders placed.")
+    # Get current positions and calculate rebalance orders
+    current_positions = broker.get_positions()
+    orders = risk_mgr.get_rebalance_orders(current_positions, positions)
+    
+    logger.info("Paper trading — executing %d orders:", len(orders))
+    results = []
+    for order in orders:
+        result = broker.place_order(
+            symbol=order.symbol,
+            side=order.side,
+            quantity=order.quantity,
+            limit_price=order.limit_price,
+        )
+        results.append(result)
+        logger.info("  %s %s %d shares → %s (filled: %d @ $%.2f)",
+                   order.side.upper(), order.symbol, order.quantity,
+                   result.status, result.filled_quantity, result.filled_price)
+    
+    # Summary
+    filled = sum(1 for r in results if r.status == "filled")
+    partial = sum(1 for r in results if "partial" in str(r.status).lower())
+    rejected = sum(1 for r in results if "reject" in str(r.status).lower())
+    logger.info("Paper trading complete: %d filled, %d partial, %d rejected",
+                filled, partial, rejected)
 
 
 def run_live(config: dict, strategy_name: str):
@@ -154,6 +214,8 @@ def main():
     parser = argparse.ArgumentParser(description="Swing Trading Bot")
     parser.add_argument("--mode", choices=["paper", "live", "backtest"], 
                        default="paper", help="Trading mode")
+    parser.add_argument("--dry-run", action="store_true",
+                       help="Paper mode: show signals without placing orders")
     parser.add_argument("--strategy", choices=list(STRATEGY_MAP.keys()),
                        default="mean_reversion", help="Strategy to run")
     parser.add_argument("--config", default="config/config.yaml",
@@ -167,7 +229,7 @@ def main():
     if args.mode == "backtest":
         run_backtest(config, args.strategy, args.start)
     elif args.mode == "paper":
-        run_paper(config, args.strategy)
+        run_paper(config, args.strategy, dry_run=args.dry_run)
     elif args.mode == "live":
         confirm = input("\n⚠️  LIVE TRADING — type 'YES' to confirm: ")
         if confirm == "YES":

@@ -42,8 +42,8 @@ class RiskManager:
         self.daily_start_equity: Optional[float] = None
         self.weekly_start_equity: Optional[float] = None
     
-    def size_positions(self, signals: pd.Series, equity: float, 
-                       volatilities: pd.Series) -> Dict[str, int]:
+    def size_positions(self, signals: pd.Series, equity: float,
+                       volatilities: Optional[pd.Series] = None) -> Dict[str, int]:
         """Calculate position sizes for each signal.
         
         Args:
