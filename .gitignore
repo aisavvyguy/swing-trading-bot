@@ -7,10 +7,11 @@ build/
 .venv/
 venv/
 
-# Data
+# Data (don't commit downloaded market data, but DO commit source code)
 data/
 *.parquet
 *.csv
+!src/data/
 !config/*.yaml
 
 # Models
